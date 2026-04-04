@@ -1,8 +1,9 @@
-import 'dart:io';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:io' as io;
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
@@ -32,8 +33,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _plateCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
 
-  File? _profilePhoto;
-  File? _vehiclePhoto;
+  XFile? _profilePhoto;
+  XFile? _vehiclePhoto;
 
   int _currentStep = 0; // 0:info, 1:photos, 2:otp
   bool _isLoading = false;
@@ -72,9 +73,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (picked != null) {
       setState(() {
         if (isProfile) {
-          _profilePhoto = File(picked.path);
+          _profilePhoto = picked;
         } else {
-          _vehiclePhoto = File(picked.path);
+          _vehiclePhoto = picked;
         }
       });
     }
@@ -144,14 +145,19 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     String profileUrl = '';
     String vehicleUrl = '';
     try {
-      profileUrl = await _storageService.uploadProfilePhoto(
-        _profilePhoto!,
-        _generatedDriverId,
-      );
-      vehicleUrl = await _storageService.uploadVehiclePhoto(
-        _vehiclePhoto!,
-        _generatedDriverId,
-      );
+      // Convert XFile to File for mobile, or skip for web
+      if (!kIsWeb && _profilePhoto != null) {
+        profileUrl = await _storageService.uploadProfilePhoto(
+          io.File(_profilePhoto!.path),
+          _generatedDriverId,
+        );
+      }
+      if (!kIsWeb && _vehiclePhoto != null) {
+        vehicleUrl = await _storageService.uploadVehiclePhoto(
+          io.File(_vehiclePhoto!.path),
+          _generatedDriverId,
+        );
+      }
     } catch (_) {
       // Photos optional if storage fails during demo
     }
@@ -331,7 +337,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               height: 3,
               margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
               decoration: BoxDecoration(
-                color: i <= _currentStep ? AppColors.primary : AppColors.cardBorder,
+                color: i <= _currentStep
+                    ? AppColors.primary
+                    : AppColors.cardBorder,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -492,7 +500,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     required String label,
     required String sublabel,
     required IconData icon,
-    required File? file,
+    required XFile? file,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -513,7 +521,37 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.file(file, fit: BoxFit.cover),
+                    // Display image based on platform
+                    if (kIsWeb)
+                      // Web: use Image.memory
+                      FutureBuilder<Uint8List>(
+                        future: file.readAsBytes(),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData) {
+                            return Image.memory(snapshot.data!,
+                                fit: BoxFit.cover);
+                          }
+                          return const Center(
+                            child: CircularProgressIndicator(
+                                color: AppColors.primary),
+                          );
+                        },
+                      )
+                    else
+                      // Mobile: use Image.memory from XFile
+                      FutureBuilder<Uint8List>(
+                        future: file.readAsBytes(),
+                        builder: (context, snapshot) {
+                          if (snapshot.hasData) {
+                            return Image.memory(snapshot.data!,
+                                fit: BoxFit.cover);
+                          }
+                          return const Center(
+                            child: CircularProgressIndicator(
+                                color: AppColors.primary),
+                          );
+                        },
+                      ),
                     Positioned(
                       top: 8,
                       right: 8,

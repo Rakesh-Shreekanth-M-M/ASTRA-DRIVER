@@ -1,4 +1,3 @@
-
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -19,6 +18,8 @@ class NotificationService {
 
   static const _channelId = 'astra_corridor';
   static const _channelName = 'ASTRA Green Corridor';
+  static const _geofenceChannelId = 'astra_geofence';
+  static const _geofenceChannelName = 'ASTRA Geofence Alerts';
 
   // ── Initialise ────────────────────────────────────
 
@@ -40,6 +41,20 @@ class NotificationService {
         .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
+
+    // Create geofence alert channel
+    const geofenceChannel = AndroidNotificationChannel(
+      _geofenceChannelId,
+      _geofenceChannelName,
+      description: 'Signal geofence entry alerts',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+    await _localNotif
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(geofenceChannel);
 
     // FCM permission
     await _fcm.requestPermission(
@@ -92,6 +107,64 @@ class NotificationService {
       DateTime.now().millisecondsSinceEpoch ~/ 1000,
       title,
       body,
+      details,
+    );
+  }
+
+  // ── Geofence Notifications ────────────────────────
+
+  Future<void> showProximityAlert(String signalName) async {
+    final androidDetails = AndroidNotificationDetails(
+      _geofenceChannelId,
+      _geofenceChannelName,
+      channelDescription: 'Signal geofence entry alerts',
+      importance: Importance.max,
+      priority: Priority.high,
+      enableVibration: true,
+      ticker: '🚨 Green Signal',
+    );
+    final details = NotificationDetails(android: androidDetails);
+
+    await _localNotif.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      '🚨 ASTRA — Signal Ahead',
+      'Green corridor active — $signalName cleared',
+      details,
+    );
+  }
+
+  Future<void> showCorridorActive(String hospital) async {
+    const androidDetails = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: 'Green corridor status',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const details = NotificationDetails(android: androidDetails);
+
+    await _localNotif.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      '✅ ASTRA — Corridor Active',
+      'Green signals cleared to $hospital',
+      details,
+    );
+  }
+
+  Future<void> showCorridorCleared() async {
+    const androidDetails = AndroidNotificationDetails(
+      _channelId,
+      _channelName,
+      channelDescription: 'Green corridor status',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    const details = NotificationDetails(android: androidDetails);
+
+    await _localNotif.show(
+      DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      'ASTRA — Corridor Ended',
+      'Signal corridor has been deactivated',
       details,
     );
   }

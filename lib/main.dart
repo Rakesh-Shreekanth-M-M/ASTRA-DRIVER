@@ -1,5 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
-
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +9,7 @@ import 'core/providers/app_provider.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/firestore_service.dart';
 import 'core/services/notification_service.dart';
+import 'firebase_options.dart';
 import 'screens/corridor/activate_corridor_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/login/login_screen.dart';
@@ -32,10 +33,14 @@ void main() async {
   );
 
   // Firebase
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  // Notification service (FCM + local)
-  await NotificationService().initialize();
+  // Notification service (FCM + local) — Android/iOS only
+  if (!kIsWeb) {
+    await NotificationService().initialize();
+  }
 
   runApp(const AstraApp());
 }
@@ -167,10 +172,13 @@ class _SplashRouterState extends State<_SplashRouter>
     if (driverId != null && driverId.isNotEmpty) {
       final driver = await firestoreService.getDriver(driverId);
       if (driver != null && mounted) {
-        // Update FCM token silently
-        final fcmToken = await NotificationService().getFcmToken();
-        if (fcmToken != null && fcmToken.isNotEmpty) {
-          await firestoreService.updateFcmToken(driverId, fcmToken);
+        // Update FCM token silently (not supported on web)
+        String? fcmToken;
+        if (!kIsWeb) {
+          fcmToken = await NotificationService().getFcmToken();
+          if (fcmToken != null && fcmToken.isNotEmpty) {
+            await firestoreService.updateFcmToken(driverId, fcmToken);
+          }
         }
         if (mounted) {
           context.read<AppProvider>().setDriver(

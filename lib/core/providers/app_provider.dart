@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import '../models/driver_model.dart';
 import '../services/corridor_service.dart';
 import '../services/location_service.dart';
+import '../services/notification_service.dart';
+import '../../services/geofence_service.dart';
 
 class AppProvider extends ChangeNotifier {
   // ── Driver ────────────────────────────────────────
@@ -42,6 +44,10 @@ class AppProvider extends ChangeNotifier {
   // ── Services ──────────────────────────────────────
   final CorridorService _corridorService = CorridorService();
   final LocationService _locationService = LocationService();
+  final NotificationService _notificationService = NotificationService();
+  final GeofenceService _geofenceService = GeofenceService();
+
+  GeofenceService get geofenceService => _geofenceService;
 
   // ── Activate Corridor ─────────────────────────────
 
@@ -70,6 +76,9 @@ class AppProvider extends ChangeNotifier {
       _activePriority = priority;
       notifyListeners();
 
+      // Show corridor active notification
+      await _notificationService.showCorridorActive(hospitalName);
+
       // Start WebSocket listener
       final stream = _corridorService.connectWebSocket();
       stream?.listen((data) {
@@ -82,6 +91,28 @@ class AppProvider extends ChangeNotifier {
         _locationService.startProximityPosting(
           driverFcmToken: _driver!.fcmToken,
         );
+
+        // Start geofencing
+        await _geofenceService.startTracking(
+          driverFcmToken: _driver!.fcmToken,
+          updateIntervalSeconds: 5,
+        );
+
+        // Listen to geofence events
+        _geofenceService.events.listen((event) {
+          if (event.eventType == 'ENTERED') {
+            // Show proximity alert notification
+            _notificationService.showProximityAlert(event.signalName);
+            // Add to notifications list
+            addNotification(
+              '📍 Entered ${event.signalName} — ${event.distance.toStringAsFixed(0)}m',
+            );
+          } else if (event.eventType == 'EXITED') {
+            addNotification(
+              '📍 Exited ${event.signalName}',
+            );
+          }
+        });
       }
 
       return true;
@@ -96,6 +127,9 @@ class AppProvider extends ChangeNotifier {
     await _corridorService.deactivateCorridor();
     _corridorService.disconnectWebSocket();
     _locationService.stopProximityPosting();
+    _geofenceService.stopTracking();
+
+    await _notificationService.showCorridorCleared();
 
     _isCorridorActive = false;
     _activeHospital = '';

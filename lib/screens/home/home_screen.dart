@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -5,11 +6,68 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/providers/app_provider.dart';
 import '../../core/services/auth_service.dart';
+import '../../services/geofence_service.dart';
 import 'widgets/corridor_status_card.dart';
 import 'widgets/notification_bell.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  StreamSubscription? _geofenceSubscription;
+  final List<GeofenceEvent> _proximityAlerts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _setupGeofenceListener();
+  }
+
+  void _setupGeofenceListener() {
+    final geofenceService =
+        Provider.of<AppProvider>(context, listen: false).geofenceService;
+
+    _geofenceSubscription = geofenceService.events.listen((event) {
+      setState(() {
+        if (event.eventType == 'ENTERED') {
+          // Show proximity alert
+          if (!_proximityAlerts.any((e) => e.signalId == event.signalId)) {
+            _proximityAlerts.add(event);
+          }
+        } else if (event.eventType == 'EXITED') {
+          // Remove from proximity alerts
+          _proximityAlerts.removeWhere((e) => e.signalId == event.signalId);
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _geofenceSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _testGeofenceTrigger(AppProvider provider) async {
+    // Test geofence trigger for demo — shows notification without actual GPS
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('🚨 Geofence test triggered!'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+
+    // Simulate proximity notification
+    provider.addNotification(
+      '📍 Demo Test: Simulating entry at Mysuru City Center',
+    );
+  }
 
   void _showNotificationsPanel(BuildContext context, AppProvider provider) {
     provider.clearNotificationBadge();
@@ -180,6 +238,43 @@ class HomeScreen extends StatelessWidget {
                           hospitalName: provider.activeHospital,
                           priority: provider.activePriority,
                         ),
+
+                        const SizedBox(height: 20),
+
+                        // ── Proximity Alerts (when active) ───────────
+                        if (provider.isCorridorActive &&
+                            _proximityAlerts.isNotEmpty)
+                          _buildProximityAlerts(),
+
+                        // ── Test Geofence Button (for demo) ─────────
+                        if (provider.isCorridorActive)
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    AppColors.accent.withValues(alpha: 0.2),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  side:
+                                      const BorderSide(color: AppColors.accent),
+                                ),
+                              ),
+                              onPressed: () => _testGeofenceTrigger(provider),
+                              icon: const Icon(
+                                Icons.location_searching,
+                                color: AppColors.accent,
+                              ),
+                              label: Text(
+                                'TEST GEOFENCE (DEMO)',
+                                style: AppTextStyles.button.copyWith(
+                                  color: AppColors.accent,
+                                ),
+                              ),
+                            ),
+                          ),
 
                         const SizedBox(height: 20),
 
@@ -498,6 +593,85 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildProximityAlerts() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('NEARBY SIGNALS', style: AppTextStyles.label),
+        const SizedBox(height: 12),
+        ..._proximityAlerts.map((alert) {
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.green.withValues(alpha: 0.1),
+                  AppColors.primary.withValues(alpha: 0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppColors.green.withValues(alpha: 0.4),
+                width: 2,
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.location_on,
+                  color: AppColors.green,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        alert.signalName,
+                        style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.green,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${alert.distance.toStringAsFixed(0)}m ahead',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textSecond,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.green.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    '🟢 GREEN',
+                    style: TextStyle(
+                      color: AppColors.green,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 12),
+      ],
     );
   }
 }
