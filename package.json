@@ -1,0 +1,14 @@
+{
+  "name": "astra-driver",
+  "version": "1.0.0",
+  "description": "ASTRA - Adaptive Signal Traffic Response Algorithm | Ambulance Driver App",
+  "scripts": {
+    "build": "echo 'Pre-build build/web locally with: flutter build web --release'"
+  },
+  "keywords": [
+    "ambulance",
+    "traffic",
+    "green-corridor",
+    "signal-control"
+  ]
+}
